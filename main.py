@@ -1,48 +1,46 @@
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Form, Request, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
-from fastapi import HTTPException
+import pandas as pd
+from pathlib import Path
 import re
-import psycopg2
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# DB connection
-conn = psycopg2.connect(
-    dbname="customer_data",
-    user="postgres",
-    password="1234",
-    host="localhost",
-    port="5432"
-)
-cursor = conn.cursor()
-
-# Georgian letter regex (Unicode range for Georgian letters)
+EXCEL_FILE = "customers.xlsx"
 GEORGIAN_REGEX = r"^[ა-ჰ]+$"
 
 @app.get("/", response_class=HTMLResponse)
 def get_form(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-
 @app.post("/submit")
 def submit_data(customer_id: str = Form(...), name: str = Form(...), surname: str = Form(...)):
-    # Validate ID length
+    # Validate ID
     if len(customer_id) != 11 or not customer_id.isdigit():
         raise HTTPException(status_code=400, detail="ID must be exactly 11 digits.")
-
-    # Validate name and surname are Georgian
+    # Validate name and surname in Georgian
     if not re.fullmatch(GEORGIAN_REGEX, name):
         raise HTTPException(status_code=400, detail="Name must be in Georgian.")
     if not re.fullmatch(GEORGIAN_REGEX, surname):
         raise HTTPException(status_code=400, detail="Surname must be in Georgian.")
 
-    # Insert into DB
-    cursor.execute(
-        "INSERT INTO submissions (customer_id, name, surname) VALUES (%s, %s, %s)",
-        (customer_id, name, surname)
-    )
-    conn.commit()
-
+    # Save to Excel
+    new_row = pd.DataFrame([[customer_id, name, surname]], columns=["ID", "Name", "Surname"])
+    path = Path(EXCEL_FILE)
+    if path.exists():
+        df = pd.read_excel(path)
+        df = pd.concat([df, new_row], ignore_index=True)
+    else:
+        df = new_row
+    df.to_excel(EXCEL_FILE, index=False)
     return RedirectResponse("/", status_code=303)
+
+@app.get("/download/customers.xlsx")
+def download_excel():
+    return FileResponse(
+        path=EXCEL_FILE,
+        filename="customers.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )

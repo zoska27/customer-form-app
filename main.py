@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 import pandas as pd
 from pathlib import Path
@@ -22,3 +22,12 @@ def submit_data(customer_id: str = Form(...), name: str = Form(...), surname: st
 
     df.to_excel(file_path, index=False)
     return RedirectResponse("/", status_code=303)
+
+@app.get("/download/customers.xlsx")
+def download_excel():
+    file_path = "customers.xlsx"
+    return FileResponse(
+        path=file_path,
+        filename="customers.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
